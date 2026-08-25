@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pandas
+numpy
+faker
+rapidfuzz
+pydantic
+python-dotenv
+pytest
+httpx
