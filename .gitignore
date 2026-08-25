@@ -37,6 +37,8 @@ Thumbs.db
 # Generated data
 backend/data/raw/*
 backend/data/processed/*
+!backend/data/ground_truth/
+!backend/data/ground_truth/*.csv
 
 # Secrets
 *.pem
