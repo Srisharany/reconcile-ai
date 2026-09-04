@@ -1,0 +1,33 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+
+html {
+  background: #050b12;
+}
+
+
+body {
+  min-width: 320px;
+  margin: 0;
+
+  background: #050b12;
+}
+
+
+#root {
+  min-height: 100vh;
+}

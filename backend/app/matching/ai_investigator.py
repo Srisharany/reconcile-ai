@@ -48,7 +48,9 @@ Be concise.
 
 Return plain text only.
 
-Use exactly these three sections:
+Do NOT use Markdown.
+
+You MUST return exactly these three sections:
 
 LIKELY_CAUSE:
 one short sentence
@@ -58,6 +60,14 @@ two or three short sentences
 
 RECOMMENDED_ACTION:
 one short sentence
+
+Do not add any other headings.
+
+Do not add any introduction.
+
+Do not add any conclusion.
+
+Do not use bullet points.
 """
 
 
@@ -116,6 +126,16 @@ def build_compact_evidence(package):
         "amount_difference":
             exception.get(
                 "amount_difference"
+            ),
+
+        "explanation":
+            exception.get(
+                "explanation"
+            ),
+
+        "recommended_action":
+            exception.get(
+                "recommended_action"
             ),
 
         "gateway": {
@@ -223,37 +243,73 @@ def build_prompt(package):
     evidence_text = json.dumps(
         evidence,
         ensure_ascii=False,
-        default=str
+        default=str,
+        indent=2
     )
 
     return f"""
 Investigate this financial reconciliation exception.
 
+Use ONLY the evidence provided below.
+
+Do not invent missing facts.
+
+If the evidence cannot prove the exact cause,
+explicitly say:
+
+The exact cause cannot be determined from the available evidence.
+
 EVIDENCE:
 
 {evidence_text}
 
-Remember:
-
-Use ONLY these facts.
-
-Do not invent missing information.
-
-If the cause cannot be proven,
-say "The exact cause cannot be determined
-from the available evidence."
-
-Return exactly:
+Return exactly this format:
 
 LIKELY_CAUSE:
-...
+one short sentence
 
 REASONING:
-...
+two or three short sentences
 
 RECOMMENDED_ACTION:
-...
+one short sentence
 """
+
+
+# ============================================================
+# TEXT CLEANING
+# ============================================================
+
+def clean_ai_text(text):
+
+    if text is None:
+        return ""
+
+    text = str(text).strip()
+
+    # Remove markdown code fences.
+    text = text.replace(
+        "```text",
+        ""
+    )
+
+    text = text.replace(
+        "```",
+        ""
+    )
+
+    # Remove markdown emphasis.
+    text = text.replace(
+        "**",
+        ""
+    )
+
+    text = text.replace(
+        "__",
+        ""
+    )
+
+    return text.strip()
 
 
 # ============================================================
@@ -262,24 +318,40 @@ RECOMMENDED_ACTION:
 
 def parse_response(text):
 
-    text = text.strip()
+    text = clean_ai_text(text)
 
     result = {
+
         "likely_cause": "",
+
         "reasoning_summary": "",
+
         "recommended_action": "",
     }
+
+    if not text:
+        return result
 
     current_section = None
 
     sections = {
+
         "LIKELY_CAUSE:":
+            "likely_cause",
+
+        "LIKELY CAUSE:":
             "likely_cause",
 
         "REASONING:":
             "reasoning_summary",
 
+        "REASONING SUMMARY:":
+            "reasoning_summary",
+
         "RECOMMENDED_ACTION:":
+            "recommended_action",
+
+        "RECOMMENDED ACTION:":
             "recommended_action",
     }
 
@@ -292,13 +364,13 @@ def parse_response(text):
         if not stripped:
             continue
 
+        upper_line = stripped.upper()
+
         matched_section = False
 
         for marker, field in sections.items():
 
-            if stripped.upper().startswith(
-                marker
-            ):
+            if upper_line.startswith(marker):
 
                 current_section = field
 
@@ -335,6 +407,36 @@ def parse_response(text):
 
 
 # ============================================================
+# RESPONSE VALIDATION
+# ============================================================
+
+def is_valid_ai_response(result):
+
+    required_fields = [
+
+        "likely_cause",
+
+        "reasoning_summary",
+
+        "recommended_action",
+    ]
+
+    for field in required_fields:
+
+        value = result.get(
+            field
+        )
+
+        if value is None:
+            return False
+
+        if not str(value).strip():
+            return False
+
+    return True
+
+
+# ============================================================
 # FALLBACK
 # ============================================================
 
@@ -345,48 +447,50 @@ def deterministic_fallback(package):
         {}
     )
 
-    exception_type = (
-        exception.get(
-            "exception_type"
-        )
-    )
-
     explanation = (
         exception.get(
-            "explanation",
-            "The reconciliation exception requires investigation."
+            "explanation"
         )
+        or
+        exception.get(
+            "reconciliation_reason"
+        )
+        or
+        "The reconciliation exception requires investigation."
     )
 
     action = (
         exception.get(
-            "recommended_action",
-            "Manual investigation required."
+            "recommended_action"
         )
+        or
+        "Manual investigation required."
+    )
+
+    exception_type = (
+        exception.get(
+            "exception_type"
+        )
+        or
+        "UNKNOWN_EXCEPTION"
     )
 
     return {
 
         "likely_cause":
-            explanation,
+            f"The deterministic reconciliation engine identified a {exception_type} exception.",
 
         "reasoning_summary":
-            (
-                "The deterministic reconciliation "
-                "engine identified this exception. "
-                "The local AI explanation was not "
-                "available, so no additional cause "
-                "is inferred."
-            ),
+            explanation,
 
         "recommended_action":
             action,
 
         "ai_status":
-            "FALLBACK",
+            "FAILED",
 
         "ai_error":
-            "Local AI response could not be parsed.",
+            "Local AI investigation was unavailable or returned an invalid response.",
     }
 
 
@@ -416,7 +520,10 @@ def apply_safety_gate(
         "exception_type"
     )
 
-    # Confidence remains deterministic.
+    # ========================================================
+    # CONFIDENCE
+    # ========================================================
+
     try:
 
         confidence = float(
@@ -448,7 +555,11 @@ def apply_safety_gate(
         4
     )
 
-    # NEVER allow AI to authorize financial action.
+    # ========================================================
+    # FINANCIAL SAFETY
+    # ========================================================
+
+    # AI can NEVER authorize financial action.
 
     result[
         "should_auto_resolve"
@@ -462,100 +573,129 @@ def apply_safety_gate(
 
 
 # ============================================================
-# INVESTIGATE
+# AI INVESTIGATION
 # ============================================================
 
-def investigate_exception(
-    package
-):
+def investigate_exception(package):
 
-    try:
+    prompt = build_prompt(
+        package
+    )
 
-        prompt = build_prompt(
-            package
-        )
+    last_error = None
 
-        response = ollama.chat(
+    # ========================================================
+    # ATTEMPT AI TWICE
+    # ========================================================
 
-            model=MODEL,
+    for attempt in range(2):
 
-            messages=[
+        try:
 
-                {
-                    "role":
-                        "system",
+            response = ollama.chat(
 
-                    "content":
-                        SYSTEM_PROMPT,
+                model=MODEL,
+
+                messages=[
+
+                    {
+
+                        "role":
+                            "system",
+
+                        "content":
+                            SYSTEM_PROMPT,
+                    },
+
+                    {
+
+                        "role":
+                            "user",
+
+                        "content":
+                            prompt,
+                    },
+                ],
+
+                options={
+
+                    "temperature":
+                        0,
+
+                    "num_predict":
+                        220,
                 },
-
-                {
-                    "role":
-                        "user",
-
-                    "content":
-                        prompt,
-                },
-            ],
-
-            options={
-
-                "temperature":
-                    0,
-
-                "num_predict":
-                    180,
-            },
-        )
-
-        raw_output = (
-            response[
-                "message"
-            ][
-                "content"
-            ]
-        )
-
-        parsed = parse_response(
-            raw_output
-        )
-
-        # If the model produced nothing useful,
-        # use deterministic fallback.
-
-        if not parsed[
-            "likely_cause"
-        ]:
-
-            return apply_safety_gate(
-                deterministic_fallback(
-                    package
-                ),
-                package
             )
 
-        parsed[
-            "ai_status"
-        ] = "SUCCESS"
+            raw_output = (
+                response
+                .get(
+                    "message",
+                    {}
+                )
+                .get(
+                    "content",
+                    ""
+                )
+            )
 
-        parsed = apply_safety_gate(
-            parsed,
-            package
-        )
+            parsed = parse_response(
+                raw_output
+            )
 
-        return parsed
+            # =================================================
+            # VALID RESPONSE
+            # =================================================
 
-    except Exception as exc:
+            if is_valid_ai_response(
+                parsed
+            ):
 
-        result = deterministic_fallback(
-            package
-        )
+                parsed[
+                    "ai_status"
+                ] = "SUCCESS"
 
-        result[
-            "ai_error"
-        ] = str(exc)
+                parsed[
+                    "ai_error"
+                ] = ""
 
-        return apply_safety_gate(
-            result,
-            package
-        )
+                return apply_safety_gate(
+                    parsed,
+                    package
+                )
+
+            last_error = (
+                "AI returned an incomplete "
+                "structured response."
+            )
+
+        except Exception as exc:
+
+            last_error = str(
+                exc
+            )
+
+    # ========================================================
+    # AI FAILED
+    # ========================================================
+
+    result = deterministic_fallback(
+        package
+    )
+
+    result[
+        "ai_status"
+    ] = "FAILED"
+
+    result[
+        "ai_error"
+    ] = (
+        last_error
+        or
+        "AI investigation failed."
+    )
+
+    return apply_safety_gate(
+        result,
+        package
+    )

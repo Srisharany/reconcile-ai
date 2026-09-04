@@ -177,119 +177,166 @@ def safe_float(value):
 
 
 # ============================================================
-# AMOUNT AT RISK
+# AMOUNT EXTRACTION
 # ============================================================
-
-def safe_float(value):
-
-    try:
-
-        if value is None:
-            return None
-
-        if isinstance(value, bool):
-            return None
-
-        return float(value)
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-
-        return None
-
 
 def get_amount_at_risk(record):
     """
-    Return the actual financial risk for an exception.
+    Determine the financial amount associated with an exception.
 
     Priority:
 
-    1. amount_at_risk ONLY when it is non-zero
-    2. amount_difference
-    3. fallback financial difference fields
-    4. 0.0
-
-    A stored amount_at_risk value of 0 must NOT hide a real
-    amount_difference.
+    1. Explicit amount_at_risk
+    2. amount_difference / difference
+    3. Difference between source amounts
+    4. Transaction/order/payment amount
     """
-
-    if not isinstance(record, dict):
-
-        return 0.0
-
 
     # --------------------------------------------------------
     # 1. Explicit amount at risk
     # --------------------------------------------------------
 
-    explicit_risk = safe_float(
-        record.get("amount_at_risk")
-    )
-
-    if (
-        explicit_risk is not None
-        and explicit_risk != 0
-    ):
-
-        return abs(explicit_risk)
-
-
-    # --------------------------------------------------------
-    # 2. Primary reconciliation difference
-    # --------------------------------------------------------
-
-    amount_difference = safe_float(
-        record.get("amount_difference")
-    )
-
-    if (
-        amount_difference is not None
-        and amount_difference != 0
-    ):
-
-        return abs(amount_difference)
-
-
-    # --------------------------------------------------------
-    # 3. Other possible difference fields
-    # --------------------------------------------------------
-
-    fallback_fields = [
-
-        "difference",
-
-        "transaction_difference",
-
+    direct_risk_fields = [
+        "amount_at_risk",
         "risk_amount",
-
-        "discrepancy_amount",
-
-        "amount_variance",
-
+        "financial_impact",
+        "loss_amount",
     ]
 
+    for field in direct_risk_fields:
 
-    for field in fallback_fields:
+        value = safe_float(record.get(field))
 
-        value = safe_float(
-            record.get(field)
-        )
-
-        if (
-            value is not None
-            and value != 0
-        ):
-
+        if value is not None:
             return abs(value)
 
 
     # --------------------------------------------------------
-    # 4. No measurable financial risk
+    # 2. Explicit amount difference
+    # --------------------------------------------------------
+
+    difference_fields = [
+        "amount_difference",
+        "difference",
+        "amount_diff",
+        "mismatch_amount",
+        "variance",
+        "amount_variance",
+    ]
+
+    for field in difference_fields:
+
+        value = safe_float(record.get(field))
+
+        if value is not None:
+            return abs(value)
+
+
+    # --------------------------------------------------------
+    # 3. Compare order / bank / gateway amounts
+    # --------------------------------------------------------
+
+    order_amount = None
+    bank_amount = None
+    gateway_amount = None
+
+
+    order_fields = [
+        "order_amount",
+        "order_total",
+        "expected_amount",
+        "expected_value",
+    ]
+
+    bank_fields = [
+        "bank_amount",
+        "bank_transaction_amount",
+        "settlement_amount",
+        "settled_amount",
+        "actual_amount",
+    ]
+
+    gateway_fields = [
+        "gateway_amount",
+        "payment_amount",
+        "transaction_amount",
+        "paid_amount",
+    ]
+
+
+    for field in order_fields:
+
+        value = safe_float(record.get(field))
+
+        if value is not None:
+            order_amount = value
+            break
+
+
+    for field in bank_fields:
+
+        value = safe_float(record.get(field))
+
+        if value is not None:
+            bank_amount = value
+            break
+
+
+    for field in gateway_fields:
+
+        value = safe_float(record.get(field))
+
+        if value is not None:
+            gateway_amount = value
+            break
+
+
+    # --------------------------------------------------------
+    # Compare available amounts
+    # --------------------------------------------------------
+
+    if order_amount is not None and bank_amount is not None:
+
+        return abs(order_amount - bank_amount)
+
+
+    if order_amount is not None and gateway_amount is not None:
+
+        return abs(order_amount - gateway_amount)
+
+
+    if bank_amount is not None and gateway_amount is not None:
+
+        return abs(bank_amount - gateway_amount)
+
+
+    # --------------------------------------------------------
+    # 4. Fall back to transaction amount
+    # --------------------------------------------------------
+
+    fallback_fields = [
+        "amount",
+        "transaction_value",
+        "value",
+        "total_amount",
+        "gross_amount",
+    ]
+
+    for field in fallback_fields:
+
+        value = safe_float(record.get(field))
+
+        if value is not None:
+            return abs(value)
+
+
+    # --------------------------------------------------------
+    # Nothing found
     # --------------------------------------------------------
 
     return 0.0
+
+
 # ============================================================
 # GET DECISION
 # ============================================================

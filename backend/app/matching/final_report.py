@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +12,6 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 PROCESSED_DATA_DIR = BASE_DIR / "data" / "processed"
-
 
 RECONCILIATION_FILE = (
     PROCESSED_DATA_DIR / "reconciliation_results.csv"
@@ -41,14 +41,29 @@ OUTPUT_JSON = (
 def safe_float(value, default=0.0):
     """
     Safely convert a value to float.
+
+    Handles:
+    - None
+    - NaN
+    - Infinity
+    - empty strings
+    - invalid values
     """
 
     try:
 
+        if value is None:
+            return default
+
         if pd.isna(value):
             return default
 
-        return float(value)
+        number = float(value)
+
+        if not math.isfinite(number):
+            return default
+
+        return number
 
     except (
         TypeError,
@@ -58,9 +73,67 @@ def safe_float(value, default=0.0):
         return default
 
 
+def safe_string(value, default=None):
+    """
+    Safely convert a value to string.
+    """
+
+    if value is None:
+        return default
+
+    try:
+
+        if pd.isna(value):
+            return default
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        pass
+
+    value = str(value).strip()
+
+    if not value:
+        return default
+
+    return value
+
+
+def clean_dataframe_for_json(dataframe):
+    """
+    Replace NaN and infinite values with None
+    before writing JSON.
+    """
+
+    dataframe = dataframe.copy()
+
+    dataframe = dataframe.replace(
+        [float("inf"), float("-inf")],
+        None,
+    )
+
+    dataframe = dataframe.where(
+        pd.notna(dataframe),
+        None,
+    )
+
+    return dataframe
+
+
+# ============================================================
+# LOAD AI INVESTIGATIONS
+# ============================================================
+
 def load_ai_investigations():
     """
     Load Pass 3 AI investigation results.
+
+    Supports:
+    1. List format
+    2. {"investigations": [...]}
+    3. Dictionary keyed by transaction ID
     """
 
     if not AI_FILE.exists():
@@ -71,23 +144,45 @@ def load_ai_investigations():
 
         return {}
 
-    with open(
-        AI_FILE,
-        "r",
-        encoding="utf-8",
-    ) as file:
+    try:
 
-        data = json.load(file)
+        with open(
+            AI_FILE,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            data = json.load(file)
+
+    except (
+        json.JSONDecodeError,
+        OSError,
+    ) as error:
+
+        print(
+            f"WARNING: Could not load AI investigations: "
+            f"{error}"
+        )
+
+        return {}
 
     investigations = {}
 
-    # Support either a list or dictionary format.
+    # --------------------------------------------------------
+    # LIST
+    # --------------------------------------------------------
+
     if isinstance(data, list):
 
         for item in data:
 
-            transaction_id = (
-                item.get("transaction_id")
+            if not isinstance(item, dict):
+                continue
+
+            transaction_id = safe_string(
+                item.get(
+                    "transaction_id"
+                )
             )
 
             if transaction_id:
@@ -96,9 +191,13 @@ def load_ai_investigations():
                     transaction_id
                 ] = item
 
+    # --------------------------------------------------------
+    # DICTIONARY
+    # --------------------------------------------------------
+
     elif isinstance(data, dict):
 
-        # If wrapped inside a results field.
+        # Wrapped format
         if isinstance(
             data.get("investigations"),
             list,
@@ -106,8 +205,13 @@ def load_ai_investigations():
 
             for item in data["investigations"]:
 
-                transaction_id = (
-                    item.get("transaction_id")
+                if not isinstance(item, dict):
+                    continue
+
+                transaction_id = safe_string(
+                    item.get(
+                        "transaction_id"
+                    )
                 )
 
                 if transaction_id:
@@ -116,11 +220,19 @@ def load_ai_investigations():
                         transaction_id
                     ] = item
 
+        # Direct dictionary format
         else:
 
             for transaction_id, item in data.items():
 
-                if isinstance(item, dict):
+                if not isinstance(item, dict):
+                    continue
+
+                transaction_id = safe_string(
+                    transaction_id
+                )
+
+                if transaction_id:
 
                     investigations[
                         transaction_id
@@ -140,29 +252,42 @@ def determine_final_decision(
     ai_result=None,
 ):
     """
-    Determine the operational decision.
+    Determine the final operational decision.
 
-    IMPORTANT:
-    AI never independently authorizes resolution.
+    IMPORTANT SAFETY RULE:
+
+    AI NEVER independently authorizes a financial action.
+
+    Pass 4 deterministic business rules always control
+    the final decision.
     """
 
-    reconciliation_status = str(
-        reconciliation_status
+    reconciliation_status = (
+        safe_string(
+            reconciliation_status,
+            "",
+        )
         or ""
     ).upper()
 
-    exception_type = str(
-        exception_type
+    exception_type = (
+        safe_string(
+            exception_type,
+            "",
+        )
         or ""
     ).upper()
 
-    severity = str(
-        severity
+    severity = (
+        safe_string(
+            severity,
+            "",
+        )
         or ""
     ).upper()
 
     # --------------------------------------------------------
-    # Normal reconciled transactions
+    # NORMAL RECONCILED TRANSACTION
     # --------------------------------------------------------
 
     if reconciliation_status == "MATCHED":
@@ -173,7 +298,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Duplicate
+    # DUPLICATE
     # --------------------------------------------------------
 
     if (
@@ -188,7 +313,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Amount mismatch
+    # AMOUNT MISMATCH
     # --------------------------------------------------------
 
     if (
@@ -204,7 +329,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Possible fee
+    # POSSIBLE FEE
     # --------------------------------------------------------
 
     if (
@@ -220,7 +345,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Ambiguous
+    # AMBIGUOUS
     # --------------------------------------------------------
 
     if (
@@ -236,7 +361,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Low confidence
+    # LOW CONFIDENCE
     # --------------------------------------------------------
 
     if (
@@ -252,7 +377,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Missing settlement
+    # MISSING SETTLEMENT
     # --------------------------------------------------------
 
     if (
@@ -268,7 +393,7 @@ def determine_final_decision(
         )
 
     # --------------------------------------------------------
-    # Fallback
+    # FALLBACK
     # --------------------------------------------------------
 
     return (
@@ -278,7 +403,7 @@ def determine_final_decision(
 
 
 # ============================================================
-# BUILD REPORT
+# BUILD FINAL REPORT
 # ============================================================
 
 def build_final_report():
@@ -291,8 +416,13 @@ def build_final_report():
 
     print("=" * 60)
 
+    print(
+        f"\nProcessed data directory:\n"
+        f"{PROCESSED_DATA_DIR}"
+    )
+
     # --------------------------------------------------------
-    # Load reconciliation results
+    # LOAD RECONCILIATION RESULTS
     # --------------------------------------------------------
 
     if not RECONCILIATION_FILE.exists():
@@ -311,8 +441,13 @@ def build_final_report():
         f"{len(reconciliation)}"
     )
 
+    print(
+        "Reconciliation columns:",
+        reconciliation.columns.tolist(),
+    )
+
     # --------------------------------------------------------
-    # Load exceptions
+    # LOAD EXCEPTIONS
     # --------------------------------------------------------
 
     if EXCEPTIONS_FILE.exists():
@@ -335,7 +470,7 @@ def build_final_report():
         )
 
     # --------------------------------------------------------
-    # Load AI investigations
+    # LOAD AI INVESTIGATIONS
     # --------------------------------------------------------
 
     ai_investigations = (
@@ -348,7 +483,7 @@ def build_final_report():
     )
 
     # --------------------------------------------------------
-    # Build exception lookup
+    # BUILD EXCEPTION LOOKUP
     # --------------------------------------------------------
 
     exception_lookup = {}
@@ -357,12 +492,12 @@ def build_final_report():
 
         for _, row in exceptions.iterrows():
 
-            transaction_id = str(
+            transaction_id = safe_string(
                 row.get(
                     "transaction_id",
-                    ""
+                    "",
                 )
-            ).strip()
+            )
 
             if transaction_id:
 
@@ -371,7 +506,7 @@ def build_final_report():
                 ] = row.to_dict()
 
     # --------------------------------------------------------
-    # Build final records
+    # BUILD FINAL RECORDS
     # --------------------------------------------------------
 
     final_records = []
@@ -383,61 +518,99 @@ def build_final_report():
     for _, row in reconciliation.iterrows():
 
         # ----------------------------------------------------
-        # Transaction ID
+        # TRANSACTION ID
         # ----------------------------------------------------
 
-        transaction_id = str(
+        transaction_id = safe_string(
             row.get(
                 "gateway_transaction_id",
                 row.get(
                     "transaction_id",
-                    ""
+                    "",
                 ),
-            )
-        ).strip()
+            ),
+            "",
+        )
 
-        status = str(
+        # ----------------------------------------------------
+        # RECONCILIATION STATUS
+        # ----------------------------------------------------
+
+        status = safe_string(
             row.get(
                 "reconciliation_status",
-                ""
-            )
-        ).strip()
+                "",
+            ),
+            "",
+        )
+
+        # ----------------------------------------------------
+        # CONFIDENCE
+        # ----------------------------------------------------
 
         confidence = safe_float(
             row.get(
                 "reconciliation_confidence",
-                0.0
+                0.0,
             )
         )
 
         # ----------------------------------------------------
-        # Exception
+        # EXCEPTION
         # ----------------------------------------------------
 
         exception = (
             exception_lookup.get(
                 transaction_id,
-                {}
+                {},
             )
         )
 
-        exception_type = exception.get(
-            "exception_type"
-        )
-
-        severity = exception.get(
-            "severity"
-        )
-
-        amount_at_risk = safe_float(
+        exception_type = safe_string(
             exception.get(
-                "amount_at_risk",
-                0.0
+                "exception_type"
+            )
+        )
+
+        severity = safe_string(
+            exception.get(
+                "severity"
             )
         )
 
         # ----------------------------------------------------
-        # AI
+        # AMOUNT AT RISK
+        # ----------------------------------------------------
+
+        amount_at_risk = safe_float(
+            exception.get(
+                "amount_at_risk",
+                0.0,
+            )
+        )
+
+        # IMPORTANT:
+        # If exception amount_at_risk is zero or missing,
+        # use the actual reconciliation amount difference.
+
+        amount_difference = safe_float(
+            row.get(
+                "amount_difference",
+                exception.get(
+                    "amount_difference",
+                    0.0,
+                ),
+            )
+        )
+
+        if amount_at_risk == 0:
+
+            amount_at_risk = abs(
+                amount_difference
+            )
+
+        # ----------------------------------------------------
+        # AI INVESTIGATION
         # ----------------------------------------------------
 
         ai_result = (
@@ -451,19 +624,22 @@ def build_final_report():
         ai_likely_cause = None
         ai_reasoning = None
         ai_action = None
+        ai_error = None
         human_review = False
 
         if ai_result:
 
-            ai_status = ai_result.get(
-                "ai_status",
-                "SUCCESS"
+            ai_status = safe_string(
+                ai_result.get(
+                    "ai_status",
+                ),
+                "SUCCESS",
             )
 
             ai_confidence = safe_float(
                 ai_result.get(
                     "confidence",
-                    0.0
+                    0.0,
                 )
             )
 
@@ -485,18 +661,22 @@ def build_final_report():
                 )
             )
 
-            human_review = bool(
+            ai_error = (
                 ai_result.get(
-                    "requires_human_review",
-                    True
+                    "ai_error"
                 )
             )
 
+            if final_decision == "RECONCILED":
+                human_review = False
+            else:
+                human_review = True
+
         # ----------------------------------------------------
-        # Final decision
+        # FINAL DECISION
         # ----------------------------------------------------
 
-        final_decision, action = (
+        final_decision, deterministic_action = (
             determine_final_decision(
                 status,
                 exception_type,
@@ -506,26 +686,30 @@ def build_final_report():
         )
 
         # ----------------------------------------------------
-        # Safety rule
+        # SAFETY GATE
         # ----------------------------------------------------
+
+        # AI can NEVER auto-resolve.
+        #
+        # Any AI-investigated exception requires
+        # human review.
 
         if ai_result:
 
-            # AI can NEVER auto-resolve
             human_review = True
 
         # ----------------------------------------------------
-        # Prefer AI recommendation when available
+        # RECOMMENDED ACTION
         # ----------------------------------------------------
 
         recommended_action = (
             ai_action
             if ai_action
-            else action
+            else deterministic_action
         )
 
         # ----------------------------------------------------
-        # Final record
+        # FINAL RECORD
         # ----------------------------------------------------
 
         final_records.append(
@@ -534,20 +718,31 @@ def build_final_report():
                     transaction_id,
 
                 "bank_reference":
-                    row.get(
-                        "bank_reference"
+                    safe_string(
+                        row.get(
+                            "bank_reference"
+                        )
                     ),
 
                 "reconciliation_status":
                     status,
 
                 "reconciliation_method":
-                    row.get(
-                        "reconciliation_method"
+                    safe_string(
+                        row.get(
+                            "reconciliation_method"
+                        )
                     ),
 
                 "reconciliation_confidence":
                     confidence,
+
+                "reconciliation_reason":
+                    safe_string(
+                        row.get(
+                            "reconciliation_reason"
+                        )
+                    ),
 
                 "exception_type":
                     exception_type,
@@ -556,7 +751,74 @@ def build_final_report():
                     severity,
 
                 "amount_at_risk":
-                    amount_at_risk,
+                    round(
+                        amount_at_risk,
+                        2,
+                    ),
+
+                "amount_difference":
+                    round(
+                        abs(
+                            amount_difference
+                        ),
+                        2,
+                    ),
+
+                "reference_similarity":
+                    safe_float(
+                        row.get(
+                            "reference_similarity",
+                            0.0,
+                        )
+                    ),
+
+                "merchant_similarity":
+                    safe_float(
+                        row.get(
+                            "merchant_similarity",
+                            0.0,
+                        )
+                    ),
+
+                "amount_similarity":
+                    safe_float(
+                        row.get(
+                            "amount_similarity",
+                            0.0,
+                        )
+                    ),
+
+                "date_similarity":
+                    safe_float(
+                        row.get(
+                            "date_similarity",
+                            0.0,
+                        )
+                    ),
+
+                "candidate_count":
+                    safe_float(
+                        row.get(
+                            "candidate_count",
+                            0.0,
+                        )
+                    ),
+
+                "second_best_score":
+                    safe_float(
+                        row.get(
+                            "second_best_score",
+                            0.0,
+                        )
+                    ),
+
+                "score_gap":
+                    safe_float(
+                        row.get(
+                            "score_gap",
+                            0.0,
+                        )
+                    ),
 
                 "ai_status":
                     ai_status,
@@ -570,6 +832,9 @@ def build_final_report():
                 "ai_reasoning":
                     ai_reasoning,
 
+                "ai_error":
+                    ai_error,
+
                 "final_decision":
                     final_decision,
 
@@ -578,6 +843,15 @@ def build_final_report():
 
                 "requires_human_review":
                     human_review,
+
+                # Explicit financial safety field.
+                "financial_action":
+                    (
+                        "BLOCKED"
+                        if final_decision
+                        != "RECONCILED"
+                        else "NONE"
+                    ),
             }
         )
 
@@ -590,11 +864,31 @@ def build_final_report():
 # KPI SUMMARY
 # ============================================================
 
-def calculate_kpis(
-    report
-):
+def calculate_kpis(report):
 
     total = len(report)
+
+    if total == 0:
+
+        return {
+            "total_transactions": 0,
+            "reconciled_transactions": 0,
+            "exception_transactions": 0,
+            "exception_rate": 0,
+            "manual_review_cases": 0,
+            "investigation_cases": 0,
+            "critical_exceptions": 0,
+            "high_exceptions": 0,
+            "medium_exceptions": 0,
+            "low_exceptions": 0,
+            "total_amount_at_risk": 0,
+            "ai_investigated_cases": 0,
+            "ai_auto_resolution": 0,
+        }
+
+    # --------------------------------------------------------
+    # RECONCILED
+    # --------------------------------------------------------
 
     reconciled = int(
         (
@@ -605,6 +899,10 @@ def calculate_kpis(
         ).sum()
     )
 
+    # --------------------------------------------------------
+    # MANUAL REVIEW
+    # --------------------------------------------------------
+
     manual_review = int(
         (
             report[
@@ -613,6 +911,10 @@ def calculate_kpis(
             == "MANUAL_REVIEW"
         ).sum()
     )
+
+    # --------------------------------------------------------
+    # INVESTIGATION
+    # --------------------------------------------------------
 
     investigate = int(
         (
@@ -623,7 +925,13 @@ def calculate_kpis(
         ).sum()
     )
 
-    exceptions = total - reconciled
+    # --------------------------------------------------------
+    # EXCEPTIONS
+    # --------------------------------------------------------
+
+    exceptions = (
+        total - reconciled
+    )
 
     exception_rate = (
         exceptions / total
@@ -631,19 +939,33 @@ def calculate_kpis(
         else 0
     )
 
+    # --------------------------------------------------------
+    # AMOUNT AT RISK
+    # --------------------------------------------------------
+
     total_amount_at_risk = (
         report[
             "amount_at_risk"
         ]
         .fillna(0)
+        .apply(
+            safe_float
+        )
         .sum()
     )
+
+    # --------------------------------------------------------
+    # SEVERITY
+    # --------------------------------------------------------
 
     critical = int(
         (
             report[
                 "severity"
             ]
+            .fillna("")
+            .astype(str)
+            .str.upper()
             == "CRITICAL"
         ).sum()
     )
@@ -653,6 +975,9 @@ def calculate_kpis(
             report[
                 "severity"
             ]
+            .fillna("")
+            .astype(str)
+            .str.upper()
             == "HIGH"
         ).sum()
     )
@@ -662,6 +987,9 @@ def calculate_kpis(
             report[
                 "severity"
             ]
+            .fillna("")
+            .astype(str)
+            .str.upper()
             == "MEDIUM"
         ).sum()
     )
@@ -671,9 +999,16 @@ def calculate_kpis(
             report[
                 "severity"
             ]
+            .fillna("")
+            .astype(str)
+            .str.upper()
             == "LOW"
         ).sum()
     )
+
+    # --------------------------------------------------------
+    # AI CASES
+    # --------------------------------------------------------
 
     ai_cases = int(
         report[
@@ -683,7 +1018,22 @@ def calculate_kpis(
         .sum()
     )
 
+    # --------------------------------------------------------
+    # AUTO RESOLUTION
+    # --------------------------------------------------------
+
+    # ALWAYS ZERO.
+    #
+    # AI is investigation-only.
+
+    ai_auto_resolution = 0
+
+    # --------------------------------------------------------
+    # RETURN
+    # --------------------------------------------------------
+
     return {
+
         "total_transactions":
             total,
 
@@ -696,7 +1046,7 @@ def calculate_kpis(
         "exception_rate":
             round(
                 exception_rate,
-                4
+                4,
             ),
 
         "manual_review_cases":
@@ -720,19 +1070,19 @@ def calculate_kpis(
         "total_amount_at_risk":
             round(
                 total_amount_at_risk,
-                2
+                2,
             ),
 
         "ai_investigated_cases":
             ai_cases,
 
         "ai_auto_resolution":
-            0,
+            ai_auto_resolution,
     }
 
 
 # ============================================================
-# SAVE
+# SAVE REPORT
 # ============================================================
 
 def save_report(
@@ -746,6 +1096,14 @@ def save_report(
     )
 
     # --------------------------------------------------------
+    # CLEAN DATA
+    # --------------------------------------------------------
+
+    report = clean_dataframe_for_json(
+        report
+    )
+
+    # --------------------------------------------------------
     # CSV
     # --------------------------------------------------------
 
@@ -755,23 +1113,60 @@ def save_report(
     )
 
     # --------------------------------------------------------
-    # JSON
+    # JSON RECORDS
+    # --------------------------------------------------------
+
+    records = report.to_dict(
+        orient="records"
+    )
+
+    # --------------------------------------------------------
+    # JSON OUTPUT
     # --------------------------------------------------------
 
     output = {
+
         "project":
             "ReconcileAI",
 
         "report_type":
             "Final Reconciliation Report",
 
+        "currency":
+            "INR",
+
         "kpis":
             kpis,
 
+        "pipeline": {
+
+            "pass_1":
+                "Exact Matching",
+
+            "pass_2":
+                "Fuzzy Matching",
+
+            "pass_3":
+                "AI Investigation",
+
+            "pass_4":
+                "Final Decision Engine",
+        },
+
+        "safety": {
+
+            "ai_can_auto_resolve":
+                False,
+
+            "financial_actions_blocked":
+                True,
+
+            "human_review_required_for_exceptions":
+                True,
+        },
+
         "records":
-            report.to_dict(
-                orient="records"
-            ),
+            records,
     }
 
     with open(
@@ -811,10 +1206,13 @@ def print_summary(
 ):
 
     print("\n")
+
     print("=" * 60)
+
     print(
         "FINAL RECONCILIATION SUMMARY"
     )
+
     print("=" * 60)
 
     print(
@@ -852,6 +1250,10 @@ def print_summary(
         f"₹{kpis['total_amount_at_risk']:,.2f}"
     )
 
+    # --------------------------------------------------------
+    # SEVERITY
+    # --------------------------------------------------------
+
     print(
         "\nSEVERITY"
     )
@@ -878,19 +1280,35 @@ def print_summary(
         f"{kpis['low_exceptions']}"
     )
 
+    # --------------------------------------------------------
+    # DECISIONS
+    # --------------------------------------------------------
+
     print(
         "\nDECISIONS"
     )
 
     print("-" * 60)
 
-    print(
-        report[
-            "final_decision"
-        ]
-        .value_counts()
-        .to_string()
-    )
+    if not report.empty:
+
+        print(
+            report[
+                "final_decision"
+            ]
+            .value_counts()
+            .to_string()
+        )
+
+    else:
+
+        print(
+            "No records."
+        )
+
+    # --------------------------------------------------------
+    # AI
+    # --------------------------------------------------------
 
     print(
         "\nAI INVESTIGATION"
@@ -907,6 +1325,14 @@ def print_summary(
         "AI auto-resolution: 0"
     )
 
+    print(
+        "Financial actions: BLOCKED"
+    )
+
+    print(
+        "Human review for exceptions: REQUIRED"
+    )
+
 
 # ============================================================
 # MAIN
@@ -914,25 +1340,48 @@ def print_summary(
 
 def main():
 
-    report = build_final_report()
+    try:
 
-    kpis = calculate_kpis(
-        report
-    )
+        report = build_final_report()
 
-    print_summary(
-        report,
-        kpis,
-    )
+        kpis = calculate_kpis(
+            report
+        )
 
-    save_report(
-        report,
-        kpis,
-    )
+        print_summary(
+            report,
+            kpis,
+        )
 
-    print(
-        "\nPass 4 complete."
-    )
+        save_report(
+            report,
+            kpis,
+        )
+
+        print(
+            "\nPass 4 complete."
+        )
+
+    except Exception as error:
+
+        print(
+            "\n"
+            + "=" * 60
+        )
+
+        print(
+            "PASS 4 FAILED"
+        )
+
+        print(
+            "=" * 60
+        )
+
+        print(
+            f"\nError:\n{error}"
+        )
+
+        raise
 
 
 # ============================================================
@@ -940,4 +1389,5 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
+
     main()

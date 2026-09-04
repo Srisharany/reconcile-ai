@@ -1,0 +1,1076 @@
+/* ============================================================
+   INVESTIGATION MODAL
+   ============================================================ */
+
+.investigation-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 9999;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  padding: 28px;
+
+  background:
+    rgba(
+      2,
+      8,
+      15,
+      0.84
+    );
+
+  backdrop-filter:
+    blur(7px);
+
+  -webkit-backdrop-filter:
+    blur(7px);
+
+  overflow-y: auto;
+
+  animation:
+    modalOverlayIn
+    0.16s
+    ease-out;
+}
+
+
+@keyframes modalOverlayIn {
+
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+
+}
+
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+
+.investigation-modal {
+
+  width:
+    min(
+      920px,
+      100%
+    );
+
+  max-height:
+    calc(
+      100vh - 56px
+    );
+
+  display: flex;
+
+  flex-direction: column;
+
+  overflow: hidden;
+
+  background:
+    #08121d;
+
+  border:
+    1px solid
+    #24415b;
+
+  border-radius: 12px;
+
+  box-shadow:
+    0 28px 90px
+    rgba(
+      0,
+      0,
+      0,
+      0.65
+    );
+
+  animation:
+    modalIn
+    0.18s
+    ease-out;
+}
+
+
+@keyframes modalIn {
+
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(10px)
+      scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+
+}
+
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+
+.modal-header {
+
+  min-height: 82px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+
+  padding:
+    18px
+    22px;
+
+  border-bottom:
+    1px solid
+    #1a3044;
+
+  background:
+    linear-gradient(
+      180deg,
+      #0b1724,
+      #08121d
+    );
+}
+
+
+.modal-header-left {
+
+  display: flex;
+
+  align-items: center;
+
+  min-width: 0;
+
+  gap: 13px;
+}
+
+
+.modal-icon {
+
+  width: 43px;
+  height: 43px;
+
+  flex: 0 0 43px;
+
+  display: grid;
+
+  place-items: center;
+
+  color: #6bbaff;
+
+  background: #0d2238;
+
+  border:
+    1px solid
+    #285a81;
+
+  border-radius: 9px;
+}
+
+
+.modal-header .panel-label {
+
+  margin:
+    0
+    0
+    5px;
+
+  color: #61a9dc;
+
+  font:
+    700 9px
+    "DM Mono",
+    monospace;
+
+  letter-spacing:
+    1.8px;
+}
+
+
+.modal-header h2 {
+
+  margin: 0;
+
+  color: #f1f6fb;
+
+  font:
+    700 24px/1.1
+    "Playfair Display",
+    Georgia,
+    serif;
+}
+
+
+/* ============================================================
+   CLOSE
+   ============================================================ */
+
+.close-button {
+
+  width: 37px;
+  height: 37px;
+
+  display: grid;
+
+  place-items: center;
+
+  flex: 0 0 37px;
+
+  border:
+    1px solid
+    #24425c;
+
+  border-radius: 7px;
+
+  background:
+    #0a1826;
+
+  color: #7da1bd;
+
+  cursor: pointer;
+}
+
+
+.close-button:hover {
+
+  color: #d5eaff;
+
+  border-color:
+    #3a6d96;
+
+  background:
+    #102235;
+}
+
+
+/* ============================================================
+   CONTENT
+   ============================================================ */
+
+.modal-content {
+
+  padding: 17px;
+
+  overflow-y: auto;
+}
+
+
+.detail-card {
+
+  margin-bottom: 13px;
+
+  padding: 18px;
+
+  border:
+    1px solid
+    #1b344a;
+
+  border-radius: 9px;
+
+  background:
+    #091521;
+}
+
+
+.detail-card:last-child {
+
+  margin-bottom: 0;
+
+}
+
+
+.detail-title {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+  margin-bottom: 17px;
+
+  color: #dceaf6;
+
+  font:
+    700 15px
+    "Playfair Display",
+    Georgia,
+    serif;
+}
+
+
+.detail-title svg {
+
+  color: #67b5ff;
+}
+
+
+/* ============================================================
+   DETAILS GRID
+   ============================================================ */
+
+.detail-grid {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(
+        0,
+        1fr
+      )
+    );
+
+  border:
+    1px solid
+    #172c40;
+
+  border-radius: 7px;
+
+  overflow: hidden;
+}
+
+
+.detail {
+
+  min-width: 0;
+
+  min-height: 68px;
+
+  padding:
+    11px
+    12px;
+
+  border-right:
+    1px solid
+    #172c40;
+
+  border-bottom:
+    1px solid
+    #172c40;
+}
+
+
+.detail:nth-child(4n) {
+
+  border-right: 0;
+
+}
+
+
+.detail span,
+.ai-status-row span,
+.decision-box span,
+.exception-explanation > span {
+
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: #587993;
+
+  font:
+    9px
+    "DM Mono",
+    monospace;
+
+  text-transform: uppercase;
+
+  letter-spacing:
+    0.4px;
+}
+
+
+.detail strong {
+
+  display: block;
+
+  overflow: hidden;
+
+  color: #b8cee0;
+
+  font:
+    10px
+    "DM Mono",
+    monospace;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   EXPLANATION
+   ============================================================ */
+
+.exception-explanation {
+
+  margin-top: 13px;
+
+  padding: 14px;
+
+  border:
+    1px solid
+    #183249;
+
+  border-radius: 7px;
+
+  background:
+    #07111b;
+}
+
+
+.exception-explanation p {
+
+  margin: 0;
+
+  color: #7895ad;
+
+  font:
+    11px/1.65
+    "DM Mono",
+    monospace;
+}
+
+
+/* ============================================================
+   MODAL SEVERITY
+   ============================================================ */
+
+.modal-severity {
+
+  width: fit-content;
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  margin-top: 12px;
+
+  padding:
+    5px
+    9px;
+
+  border-radius: 5px;
+
+  font:
+    700 9px
+    "DM Mono",
+    monospace;
+}
+
+
+.modal-severity.critical {
+
+  color: #ff7474;
+
+  background: #35171b;
+}
+
+
+.modal-severity.high {
+
+  color: #eab64c;
+
+  background: #332610;
+}
+
+
+.modal-severity.medium {
+
+  color: #d8b35c;
+
+  background: #302711;
+}
+
+
+.modal-severity.low {
+
+  color: #6ea9d7;
+
+  background: #13283a;
+}
+
+
+.modal-severity
+.severity-dot {
+
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background:
+    currentColor;
+}
+
+
+/* ============================================================
+   AI
+   ============================================================ */
+
+.ai-card
+.detail-title
+svg {
+
+  color: #b080ff;
+}
+
+
+.ai-status-row {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      1fr
+    );
+
+  border:
+    1px solid
+    #172c40;
+
+  border-radius: 7px;
+
+  overflow: hidden;
+
+  margin-bottom: 14px;
+}
+
+
+.ai-status-row > div {
+
+  min-height: 66px;
+
+  padding:
+    11px
+    13px;
+
+  border-right:
+    1px solid
+    #172c40;
+}
+
+
+.ai-status-row
+> div:last-child {
+
+  border-right: 0;
+}
+
+
+.ai-status-row strong {
+
+  color: #d7e8f5;
+
+  font:
+    11px
+    "DM Mono",
+    monospace;
+}
+
+
+.review-required {
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  color: #f0bc57 !important;
+}
+
+
+/* ============================================================
+   AI TEXT
+   ============================================================ */
+
+.detail-text {
+
+  margin-top: 12px;
+
+  padding: 13px;
+
+  border:
+    1px solid
+    #172c40;
+
+  border-radius: 7px;
+
+  background:
+    #07111b;
+}
+
+
+.detail-text > strong {
+
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: #a6c6df;
+
+  font:
+    600 10px
+    "DM Mono",
+    monospace;
+}
+
+
+.detail-text p {
+
+  margin: 0;
+
+  color: #7895ad;
+
+  font:
+    11px/1.65
+    "DM Mono",
+    monospace;
+}
+
+
+/* ============================================================
+   AI SAFETY
+   ============================================================ */
+
+.ai-safety-note,
+.decision-note {
+
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 8px;
+
+  margin-top: 13px;
+
+  padding:
+    11px
+    12px;
+
+  border:
+    1px solid
+    #243b4e;
+
+  border-radius: 7px;
+
+  background:
+    #0a1723;
+
+  color: #637f98;
+
+  font:
+    9px/1.5
+    "DM Mono",
+    monospace;
+}
+
+
+.ai-safety-note svg,
+.decision-note svg {
+
+  color: #718ca3;
+
+  flex: 0 0 auto;
+
+  margin-top: 1px;
+}
+
+
+/* ============================================================
+   AI UNAVAILABLE
+   ============================================================ */
+
+.ai-unavailable {
+
+  display: flex;
+
+  gap: 12px;
+
+  padding: 18px;
+
+  border:
+    1px solid
+    #49312d;
+
+  border-radius: 7px;
+
+  background:
+    #19130f;
+
+  color: #d49d64;
+}
+
+
+.ai-unavailable strong {
+
+  display: block;
+
+  margin-bottom: 5px;
+
+  font:
+    600 11px
+    "DM Mono",
+    monospace;
+}
+
+
+.ai-unavailable p {
+
+  margin: 0;
+
+  color: #8c7564;
+
+  font:
+    10px/1.5
+    "DM Mono",
+    monospace;
+}
+
+
+/* ============================================================
+   DECISION
+   ============================================================ */
+
+.decision-card
+.detail-title
+svg {
+
+  color: #5fc99b;
+}
+
+
+.decision-box {
+
+  display: grid;
+
+  grid-template-columns:
+    1fr
+    2fr;
+
+  border:
+    1px solid
+    #1b3944;
+
+  border-radius: 7px;
+
+  overflow: hidden;
+
+  background:
+    #081817;
+}
+
+
+.decision-box > div {
+
+  padding: 14px;
+
+  border-right:
+    1px solid
+    #1b3944;
+}
+
+
+.decision-box
+> div:last-child {
+
+  border-right: 0;
+}
+
+
+.decision-box strong {
+
+  color: #8fe3bd;
+
+  font:
+    11px/1.5
+    "DM Mono",
+    monospace;
+}
+
+
+.decision-note {
+
+  color: #6d8b9d;
+}
+
+
+/* ============================================================
+   LOADING
+   ============================================================ */
+
+.modal-loading {
+
+  min-height: 300px;
+
+  display: grid;
+
+  place-content: center;
+
+  justify-items: center;
+
+  gap: 9px;
+
+  color: #7d9ab2;
+
+  font:
+    10px
+    "DM Mono",
+    monospace;
+}
+
+
+.modal-loading strong {
+
+  color: #dbe8f3;
+
+  font:
+    12px
+    "DM Mono",
+    monospace;
+}
+
+
+.modal-loading span {
+
+  color: #52718b;
+}
+
+
+.modal-spinner {
+
+  width: 30px;
+  height: 30px;
+
+  margin-bottom: 5px;
+
+  border:
+    2px solid
+    #173047;
+
+  border-top-color:
+    #5eb4ff;
+
+  border-radius: 50%;
+
+  animation:
+    modalSpin
+    0.75s
+    linear
+    infinite;
+}
+
+
+@keyframes modalSpin {
+
+  to {
+    transform:
+      rotate(360deg);
+  }
+
+}
+
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+
+.modal-footer {
+
+  min-height: 58px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+
+  padding:
+    10px
+    18px;
+
+  border-top:
+    1px solid
+    #182e42;
+
+  background:
+    #08131e;
+}
+
+
+.footer-security {
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  color: #607d94;
+
+  font:
+    9px
+    "DM Mono",
+    monospace;
+}
+
+
+.modal-close-action {
+
+  min-width: 74px;
+
+  padding:
+    8px
+    14px;
+
+  border:
+    1px solid
+    #285273;
+
+  border-radius: 6px;
+
+  background:
+    #0b1d2c;
+
+  color: #7ec1f7;
+
+  font:
+    10px
+    "DM Mono",
+    monospace;
+
+  cursor: pointer;
+}
+
+
+.modal-close-action:hover {
+
+  color: #b7def8;
+
+  border-color:
+    #3f739a;
+
+  background:
+    #102a40;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 800px) {
+
+  .investigation-overlay {
+    padding: 12px;
+  }
+
+  .investigation-modal {
+    max-height:
+      calc(
+        100vh - 24px
+      );
+  }
+
+  .detail-grid {
+    grid-template-columns:
+      repeat(
+        2,
+        1fr
+      );
+  }
+
+  .detail:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .detail:nth-child(4n) {
+    border-right:
+      1px solid
+      #172c40;
+  }
+}
+
+
+@media (max-width: 600px) {
+
+  .modal-header {
+    padding: 14px;
+  }
+
+  .modal-content {
+    padding: 12px;
+  }
+
+  .detail-grid,
+  .ai-status-row,
+  .decision-box {
+    grid-template-columns:
+      1fr;
+  }
+
+  .detail {
+    border-right: 0 !important;
+  }
+
+  .ai-status-row > div,
+  .decision-box > div {
+    border-right: 0;
+
+    border-bottom:
+      1px solid
+      #172c40;
+  }
+
+  .ai-status-row
+  > div:last-child,
+  .decision-box
+  > div:last-child {
+    border-bottom: 0;
+  }
+
+  .modal-footer {
+    padding:
+      9px
+      12px;
+  }
+
+  .footer-security {
+    display: none;
+  }
+
+  .modal-footer {
+    justify-content: flex-end;
+  }
+}
